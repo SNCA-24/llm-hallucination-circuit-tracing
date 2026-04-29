@@ -1,0 +1,25 @@
+{
+  "artifact_paths": {
+    "forward_pass_artifact": "outputs/runs/20260425_064458_forward_pass_813/forward_pass_pilot.pt",
+    "head_ablation_results": "outputs/runs/20260425_075129_head_ablation_813/head_ablation_results.jsonl",
+    "head_ablation_summary_md": "outputs/runs/20260425_075129_head_ablation_813/head_ablation_summary.md",
+    "head_patching_results": "outputs/runs/20260425_073014_head_patching_813/head_patching_results.jsonl",
+    "metadata": "outputs/runs/20260425_064458_forward_pass_813/tracing_pilot_input_with_divergence.json"
+  },
+  "backward_compatibility_mode": false,
+  "code_entrypoint": "scripts/run_head_ablation_pilot.py",
+  "finished_at": "2026-04-25T07:55:16Z",
+  "input_registry_path": "outputs/examples_registry.csv",
+  "model_alias": "llama-2-7b-chat",
+  "notes": [
+    "Head ablation only.",
+    "Selected head slices are zeroed in the clean run at the clean causal prediction position."
+  ],
+  "run_id": "20260425_075129_head_ablation_813",
+  "stage_name": "head_ablation",
+  "started_at": "2026-04-25T07:51:29Z",
+  "status": "success",
+  "target_example_ids": [
+    "813"
+  ]
+}

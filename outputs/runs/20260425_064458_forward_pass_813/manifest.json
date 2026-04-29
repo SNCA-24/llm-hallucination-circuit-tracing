@@ -1,0 +1,24 @@
+{
+  "artifact_paths": {
+    "forward_pass_summary_md": "outputs/runs/20260425_064458_forward_pass_813/forward_pass_summary.md",
+    "forward_pass_tensor": "outputs/runs/20260425_064458_forward_pass_813/forward_pass_pilot.pt",
+    "input_tracing_pilot": "outputs/runs/20260425_013328_tracing_prep_813/tracing_pilot_input.json",
+    "updated_tracing_pilot_input": "outputs/runs/20260425_064458_forward_pass_813/tracing_pilot_input_with_divergence.json"
+  },
+  "backward_compatibility_mode": false,
+  "code_entrypoint": "scripts/run_forward_pass_pilot.py",
+  "finished_at": "2026-04-25T06:47:50Z",
+  "input_registry_path": "outputs/examples_registry.csv",
+  "model_alias": "llama-2-7b-chat",
+  "notes": [
+    "Forward pass only. Layer/head patching stages were not run.",
+    "Model scope is llama-2-7b-chat only."
+  ],
+  "run_id": "20260425_064458_forward_pass_813",
+  "stage_name": "forward_pass",
+  "started_at": "2026-04-25T06:44:58Z",
+  "status": "success",
+  "target_example_ids": [
+    "813"
+  ]
+}

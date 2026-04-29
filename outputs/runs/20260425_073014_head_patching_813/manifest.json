@@ -1,0 +1,25 @@
+{
+  "artifact_paths": {
+    "forward_pass_artifact": "outputs/runs/20260425_064458_forward_pass_813/forward_pass_pilot.pt",
+    "head_patching_results": "outputs/runs/20260425_073014_head_patching_813/head_patching_results.jsonl",
+    "head_patching_summary_md": "outputs/runs/20260425_073014_head_patching_813/head_patching_summary.md",
+    "layer_results": "outputs/runs/20260425_070723_layer_patching_813/layer_patching_results.jsonl",
+    "metadata": "outputs/runs/20260425_064458_forward_pass_813/tracing_pilot_input_with_divergence.json"
+  },
+  "backward_compatibility_mode": false,
+  "code_entrypoint": "scripts/run_head_patching_pilot.py",
+  "finished_at": "2026-04-25T07:34:46Z",
+  "input_registry_path": "outputs/examples_registry.csv",
+  "model_alias": "llama-2-7b-chat",
+  "notes": [
+    "Head patching only. Ablation stage was not run.",
+    "One attention head at a time is patched from corrupted run into clean run at the aligned causal prediction position."
+  ],
+  "run_id": "20260425_073014_head_patching_813",
+  "stage_name": "head_patching",
+  "started_at": "2026-04-25T07:30:14Z",
+  "status": "success",
+  "target_example_ids": [
+    "813"
+  ]
+}

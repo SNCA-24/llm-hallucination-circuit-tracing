@@ -1,0 +1,21 @@
+{
+  "artifact_paths": {
+    "source_pair_validation_result": "outputs/runs/20260425_060337_pair_validation_813/pair_validation_results_813.jsonl",
+    "tracing_pilot_input": "outputs/runs/20260425_012939_tracing_prep_813/tracing_pilot_input.json"
+  },
+  "backward_compatibility_mode": false,
+  "code_entrypoint": "scripts/prepare_tracing_input.py",
+  "finished_at": "2026-04-25T06:29:39Z",
+  "input_registry_path": "outputs/examples_registry.csv",
+  "model_alias": null,
+  "notes": [
+    "Prepared tracing input only. Forward pass and patching stages were not run."
+  ],
+  "run_id": "20260425_012939_tracing_prep_813",
+  "stage_name": "tracing_prep",
+  "started_at": "2026-04-25T06:29:39Z",
+  "status": "success",
+  "target_example_ids": [
+    "813"
+  ]
+}

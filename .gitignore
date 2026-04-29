@@ -1,0 +1,66 @@
+# Python caches and build output
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# OS / editor / notebook noise
+.DS_Store
+.vscode/
+.idea/
+.ipynb_checkpoints/
+
+# Local caches and runtime services
+.cache/
+wandb/
+mlruns/
+
+# Secrets and local environment files
+.env
+.env.*
+hf_token*
+
+# External datasets / raw downloaded corpora
+data/raw/
+datasets/
+RAGTruth*/
+RAGTruth_Xtended*/
+
+# Large archives and duplicated transfer bundles
+*.zip
+*.tar
+*.tar.gz
+pair_validation_bundle/
+
+# Logs
+*.log
+
+# Heavy model/tensor artifacts
+*.safetensors
+outputs/*.pt
+outputs/runs/**/*.pt
+outputs/runs/**/*.safetensors
+outputs/runs/**/forward_pass_pilot.pt
+outputs/runs/**/model*
+
+# Keep these intentionally:
+# - outputs/examples_registry.csv
+# - outputs/runs/**/manifest.json
+# - outputs/runs/**/summary.json
+# - docs/
+# - scripts/
+# - src/
+# - configs/
+# - README.md
+# - requirements.txt

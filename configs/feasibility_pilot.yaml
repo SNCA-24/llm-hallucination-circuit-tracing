@@ -1,0 +1,33 @@
+project_root: "."
+ragtruth_repo_path: "RAGTruth-main"
+ragtruth_xtended_repo_path: "RAGTruth_Xtended-main"
+primary_model: "llama-2-7b-chat"
+secondary_model: "mistral-7B-instruct"
+hallucination_type: "number"
+primary_dataset: "ragtruth_xtended"
+supporting_dataset: "ragtruth"
+pilot_sample_size: 10
+language_partition: "english"
+allowed_edit_classes:
+  - "short_disambiguating_clause"
+  - "one_added_supporting_evidence_sentence"
+  - "small_clarification_phrase"
+  - "format_preserving_rewrite"
+output_paths:
+  curated_examples: "outputs/pilot_curated_examples.jsonl"
+  audit_docs: "docs/dataset_feasibility_audit.md"
+  logs: "outputs/pilot.log"
+  pair_validation_results: "outputs/pair_validation_results.jsonl"
+  pair_validation_doc: "docs/pair_validation.md"
+generation_settings:
+  max_new_tokens: 96
+  do_sample: false
+  temperature: 0.0
+  top_p: 1.0
+  repetition_penalty: 1.0
+  seed: 42
+pair_validation:
+  input_csv: "outputs/pair_authoring_review_sheet.csv"
+  target_example_ids:
+    - "51"
+    - "369"

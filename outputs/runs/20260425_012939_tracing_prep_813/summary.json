@@ -1,0 +1,27 @@
+{
+  "artifact_paths": {
+    "source_pair_validation_result": "outputs/runs/20260425_060337_pair_validation_813/pair_validation_results_813.jsonl",
+    "tracing_pilot_input": "outputs/runs/20260425_012939_tracing_prep_813/tracing_pilot_input.json"
+  },
+  "finished_at": "2026-04-25T06:29:39Z",
+  "forward_pass_run": false,
+  "patching_run": false,
+  "processed_failed": [],
+  "processed_success": [
+    {
+      "artifact_path": "outputs/runs/20260425_012939_tracing_prep_813/tracing_pilot_input.json",
+      "example_id": "813"
+    }
+  ],
+  "retained_example_ids": [
+    "813"
+  ],
+  "run_id": "20260425_012939_tracing_prep_813",
+  "skipped_already_done": [],
+  "skipped_ineligible": [],
+  "stage_name": "tracing_prep",
+  "status": "success",
+  "target_example_ids": [
+    "813"
+  ]
+}

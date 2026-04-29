@@ -1,0 +1,41 @@
+{
+  "ablation_run": false,
+  "artifact_paths": {
+    "forward_pass_artifact": "outputs/runs/20260425_064458_forward_pass_813/forward_pass_pilot.pt",
+    "head_patching_results": "outputs/runs/20260425_073014_head_patching_813/head_patching_results.jsonl",
+    "head_patching_summary_md": "outputs/runs/20260425_073014_head_patching_813/head_patching_summary.md",
+    "layer_results": "outputs/runs/20260425_070723_layer_patching_813/layer_patching_results.jsonl",
+    "metadata": "outputs/runs/20260425_064458_forward_pass_813/tracing_pilot_input_with_divergence.json"
+  },
+  "finished_at": "2026-04-25T07:34:46Z",
+  "model_alias": "llama-2-7b-chat",
+  "processed_failed": [],
+  "processed_success": [
+    {
+      "doc_path": "outputs/runs/20260425_073014_head_patching_813/head_patching_summary.md",
+      "example_id": "813",
+      "results_path": "outputs/runs/20260425_073014_head_patching_813/head_patching_results.jsonl",
+      "target_layers": [
+        30,
+        29,
+        31
+      ]
+    }
+  ],
+  "retained_example_ids": [
+    "813"
+  ],
+  "run_id": "20260425_073014_head_patching_813",
+  "skipped_already_done": [],
+  "skipped_ineligible": [],
+  "stage_name": "head_patching",
+  "status": "success",
+  "target_example_ids": [
+    "813"
+  ],
+  "target_layers": [
+    30,
+    29,
+    31
+  ]
+}
