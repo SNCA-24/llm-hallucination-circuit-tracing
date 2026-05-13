@@ -128,4 +128,8 @@ Not allowed:
 
 ## License
 
-License pending / academic project use only.
+Original project code, scripts, documentation, and project scaffolding in this repository are licensed under the [MIT License](LICENSE) unless otherwise noted.
+
+Third-party datasets, model checkpoints, model weights, libraries, and other external resources remain governed by their original licenses and terms. This repository does not relicense upstream materials such as RAGTruth, RAGTruth_Xtended, Llama-2 artifacts, or external Python dependencies under MIT.
+
+Large model artifacts are not included in this repository. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for additional attribution and usage notes.

@@ -29,13 +29,18 @@ mlruns/
 # Secrets and local environment files
 .env
 .env.*
+.envrc
 hf_token*
+*.pem
+*.key
+secrets/
 
 # External datasets / raw downloaded corpora
 data/raw/
 datasets/
 RAGTruth*/
 RAGTruth_Xtended*/
+raw_datasets/
 
 # Large archives and duplicated transfer bundles
 *.zip
@@ -45,14 +50,25 @@ pair_validation_bundle/
 
 # Logs
 *.log
+career_os_evidence_draft.md
 
 # Heavy model/tensor artifacts
 *.safetensors
+*.pt
+*.pth
+*.ckpt
+*.bin
+pytorch_model*
+checkpoint-*/
 outputs/*.pt
 outputs/runs/**/*.pt
 outputs/runs/**/*.safetensors
 outputs/runs/**/forward_pass_pilot.pt
 outputs/runs/**/model*
+.cache/huggingface/
+.huggingface/
+hf_home/
+sample_data/
 
 # Keep these intentionally:
 # - outputs/examples_registry.csv
