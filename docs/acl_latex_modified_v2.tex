@@ -1,0 +1,572 @@
+\documentclass[11pt]{article}
+
+% Use preprint mode for a non-anonymous professor-facing draft.
+\usepackage[final]{acl}
+
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{array}
+\usepackage{url}
+\usepackage{dblfloatfix}
+\usepackage{cuted}
+\usepackage{capt-of}
+
+\setlength{\dbltextfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\dblfloatsep}{8pt plus 2pt minus 2pt}
+
+\title{A Pilot study on Mechanistic Tracing of Prompt-Corrected Hallucination Pairs in Llama-2-7B-Chat}
+
+\author{Sai Naga Chaithanya Aavula \quad Priyabrata Behera \quad Nithish Dimpu Karanam \\
+\texttt{\{sainagachaithanyaaavula, priyabratabehera,dimpunithishkaranam\}@my.unt.edu} \\
+University of North Texas}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Large language models can produce factual errors that are fluent, plausible, and close to the source context. This pilot study tests whether minimally edited prompts can create controlled clean/corrupted pairs for mechanistic tracing of such hallucinations. In this setup, the clean prompt is the original prompt condition that reproduces a target hallucination, while the corrupted prompt is a minimal factuality-oriented edit that flips the model toward a verified-truth continuation. We evaluate two completed examples in \texttt{llama-2-7b-chat} using pair validation, teacher-forced forward-pass alignment, layer patching, head patching, and head ablation. Across the two validated examples, the strongest repeated signal appears at the layer level in late layers around L29--L30; however, the strongest head candidates differ by example. These results should be interpreted as pilot evidence over two validated examples, not as statistical generalization or evidence of a stable hallucination circuit.
+\end{abstract}
+
+\section{Introduction}
+
+Hallucinations in language models are difficult to study because factual errors can be sensitive to prompt wording, decoding behavior, tokenization, and source context. A useful mechanistic setup should isolate a contrast where the model produces a target hallucination in a baseline (``clean'') condition and a verified-truth continuation in an intervened (``corrupted'') condition. This project studies whether minimal prompt corrections can create that contrast reliably enough to support causal tracing.
+
+The central question is:
+
+\begin{quote}
+\emph{Can minimal prompt corrections create validated hallucination/truth pairs that are suitable for mechanistic tracing?}
+\end{quote}
+
+We treat this as a pilot study. The goal is not to claim a general mechanism for hallucination, nor to identify a stable circuit or head family. Instead, the goal is to establish a reusable workflow and report the first completed tracing results under conservative claim boundaries.
+
+This matches the project objective of localizing layers and attention heads that contribute to hallucinated continuations under a validated prompt intervention, while keeping the scope narrow enough for careful interpretation.
+
+This draft makes four contributions:
+\begin{enumerate}
+    \item A registry-based workflow for selecting, validating, tracing, and auditing candidate examples.
+    \item A clean/corrupted pair construction procedure that requires clean hallucination reproduction and corrupted truth flipping before tracing.
+    \item A two-example tracing pilot for \texttt{llama-2-7b-chat}.
+    \item A conservative cross-example comparison showing repeated late-layer restoration around L29--L30, while exact head candidates differ.
+\end{enumerate}
+
+Future examples can be added modularly by appending to the evidence table, adding a new Results subsection, and updating the cross-example analysis only when the new example changes the pattern.
+
+\section{Related Work}
+
+Prior work on hallucination and factuality frames language-model errors as cases where generated text is unsupported, contradicted, or otherwise misaligned with the available evidence \citep{TruthfulQA,SelfCheckGPT}. This project focuses on short, concrete factual deviations that can be paired with a verified correction target.
+
+The candidate examples are derived from the RAGTruth/RAGTruth\_Xtended workflow, which provides source-grounded examples of model responses and factuality issues suitable for controlled follow-up analysis \citep{RAGTruth,RAGTruthXtended}. The registry layer in this project narrows those candidates to examples with concrete hallucinated spans, feasible token mapping, and a minimal intervention prompt.
+
+The model scope is \texttt{llama-2-7b-chat}, a chat-tuned Llama-2 model \citep{Llama2}. Results in this draft are specific to that model and should not be generalized to other checkpoints without additional experiments.
+
+Mechanistically, the tracing stages build on activation patching and causal tracing methods that intervene on internal representations to measure their effect on output logits \citep{ROME,ActivationPatchingBestPractices}. Layer patching is used as a coarse localization step.
+
+The head-level stages follow the same intervention logic at the attention-head level, using head patching and ablation to test candidate components within the late-layer regions identified by layer patching \citep{TransformerCircuits,IOICircuit}. Prompt-sensitivity work also motivates treating prompt edits as meaningful interventions rather than neutral formatting changes \citep{AutoPrompt,PromptOrderSensitivity}.
+
+This project uses existing causal tracing ideas as tools. It does not propose a new tracing algorithm. The novelty in the current pilot is the controlled prompt-correction workflow and the operational discipline around validating, storing, and comparing examples.
+
+\section{Dataset and Model Scope}
+
+\subsection{Source Examples}
+
+Admitted examples are derived from the RAGTruth\_Xtended/RAGTruth workflow and managed through \texttt{outputs/examples\_registry.csv}, which is the canonical project state for admitted examples. Candidate examples are admitted only after pre-registry checks confirm that the hallucinated behavior is concrete, relevant to the project scope, and suitable for downstream validation.
+
+The registry tracks candidate provenance, clean input text, verified ground-truth target, hallucinated substring, token-span feasibility, corrupted prompt candidate, pair-validation status, tracing status, and latest run artifacts.
+
+Failed and parked examples are tracked explicitly rather than omitted. This is important because validation failure is a meaningful part of the workflow, not a hidden preprocessing detail.
+
+\subsection{Model Scope}
+
+All completed tracing results in this draft use \texttt{llama-2-7b-chat}. The current results should not be generalized to other models, model sizes, chat templates, or decoding settings.
+
+\subsection{Completed and Excluded Examples}
+
+Two examples have completed pair validation and full tracing: example \texttt{369} and example \texttt{813}. Known failed, parked, or ambiguous examples include \texttt{51}, \texttt{3573}, \texttt{93}, \texttt{597}, \texttt{2793}, \texttt{2265}, and \texttt{2781}. Only validated examples are used in the Results and Cross-Example Analysis sections. Excluded examples are summarized in Appendix~\ref{app:excluded}.
+
+\section{Methodology}
+
+\subsection{Registry and Run Artifact Workflow}
+
+The project uses a split between canonical state and routine run artifacts. The registry, \texttt{outputs/examples\_registry.csv}, answers the question: what is the latest state of each example? Run folders under \texttt{outputs/runs/<run\_id>/} answer the question: what happened in a specific execution?
+
+Each routine run writes artifacts under a run-specific folder. Run IDs follow this format:
+
+\begin{quote}
+\texttt{YYYYMMDD\_HHMMSS\_<stage>\_<short\_scope>}
+\end{quote}
+
+Each run folder contains \texttt{manifest.json}, \texttt{summary.json}, and stage-specific artifacts such as JSONL results or tensor artifacts. The registry stores concise status summaries and latest artifact pointers, not full raw outputs. This separation is intended to make reruns, partial failures, and future example additions auditable without overwriting prior evidence.
+
+\subsection{Clean/Corrupted Pair Construction}
+
+The clean prompt is the original prompt condition used for validation. In this project, ``clean'' does not mean factually correct; it means the unmodified baseline condition. A clean prompt is useful only if it reproduces the target hallucination.
+
+The corrupted prompt is a minimally edited intervention prompt, often by adding a factuality-oriented instruction or constraint. In this project, ``corrupted'' means intervention condition, following causal-tracing terminology. The corrupted prompt is useful only if it flips the model toward the verified-truth target without retaining the hallucinated substring.
+
+An example passes pair validation only if the clean run reproduces the target hallucination and the corrupted run flips to the verified truth. Examples that do not pass this gate are failed or parked and are not traced.
+
+\subsection{Forward-Pass Alignment}
+
+For each validated pair, the workflow performs teacher-forced prompt and output alignment. The purpose is to identify an aligned divergence point where the hallucinated continuation and verified-truth continuation differ.
+
+The tracing stages use the causal prediction index immediately before the divergence token. This is important because the model predicts the next token from the previous position. Forward-pass artifacts store the clean and corrupted absolute divergence token indices and prediction indices, and downstream stages consume those indices directly.
+
+\subsection{Layer Patching}
+
+Layer patching patches corrupted-run hidden states into the clean run at the aligned causal prediction position. The restoration score is based on a truth-minus-hallucination logit margin. Let $\ell_T$ be the verified-truth token logit, $\ell_H$ be the hallucinated-token logit, $m_{\mathrm{base}}$ be the clean-run baseline margin, and $m_{\mathrm{patch}}$ be the patched-run margin:
+
+\begin{align}
+m_{\mathrm{base}} &= \ell_T^{\mathrm{clean}} - \ell_H^{\mathrm{clean}} \\
+m_{\mathrm{patch}} &= \ell_T^{\mathrm{patch}} - \ell_H^{\mathrm{patch}} \\
+s_{\mathrm{restore}} &= m_{\mathrm{patch}} - m_{\mathrm{base}}
+\end{align}
+
+A higher restoration score indicates that the patched activation moved the clean run more toward the verified-truth token relative to the hallucinated token. This is a localization signal, not proof of a complete mechanism.
+
+\subsection{Head Patching}
+
+Head patching is a finer-grained follow-up to layer patching. It patches one attention head at a time from the corrupted run into the clean run, again at the aligned prediction position. Candidate heads are ranked by the same restoration-score logic used for layer patching.
+
+The current pilot treats head-patching results as candidate localization evidence. It does not assume that the strongest head in one example will also be strongest in another.
+
+\subsection{Head Ablation}
+
+Head ablation tests candidate heads by suppressing selected head contributions in the clean run. Let $m_{\mathrm{abl}}$ be the margin after ablation, using the same truth-minus-hallucination margin definition:
+
+\begin{align}
+m_{\mathrm{base}} &= \ell_T^{\mathrm{clean}} - \ell_H^{\mathrm{clean}} \\
+m_{\mathrm{abl}} &= \ell_T^{\mathrm{abl}} - \ell_H^{\mathrm{abl}} \\
+s_{\mathrm{abl}} &= m_{\mathrm{abl}} - m_{\mathrm{base}}
+\end{align}
+
+In this project, ablation is used as a follow-up check on candidate heads from patching. It should not be interpreted as a full causal proof of a circuit, especially with only two completed examples.
+
+\section{Experimental Setup}
+
+The heavy model stages were run in Colab where needed, while routine project state and saved artifacts are organized locally through the registry and run folders. The tracing lifecycle is candidate admission into the registry, token-span feasibility check, human review and minimal corrupted prompt authoring, pair validation, tracing prep, forward-pass alignment, layer patching, head patching, and head ablation (summarized in Table~\ref{tab:workflow}).
+
+\begin{table*}[t]
+\caption{Experimental workflow stages, purposes, and outputs.}
+\centering
+\small
+\begin{tabular}{p{0.20\linewidth}p{0.38\linewidth}p{0.34\linewidth}}
+\toprule
+\textbf{Stage} & \textbf{Purpose} & \textbf{Output} \\
+\midrule
+Registry admission & Track approved examples and metadata & Registry row \\
+Token-span feasibility & Check whether the hallucinated span can be mapped cleanly to tokens & Token mapping status and span fields \\
+Pair validation & Confirm clean hallucination reproduction and corrupted truth flip & Validation status and JSONL result artifact \\
+Tracing prep & Package validated prompts and targets for tracing & \texttt{tracing\_pilot\_input.json} \\
+Forward pass & Align clean/corrupted outputs and divergence indices & Tensor artifact and divergence metadata \\
+Layer patching & Localize layer-level restoration signal & Layer results JSONL and summary \\
+Head patching & Test candidate attention heads & Head results JSONL and summary \\
+Head ablation & Evaluate candidate head influence in clean run & Ablation results JSONL and summary \\
+\bottomrule
+\end{tabular}
+
+\label{tab:workflow}
+\end{table*}
+
+The current report evaluates only examples that completed the validation and tracing lifecycle. Results are reported using validation outcome, divergence token, top restoring layers, top restoring heads, best ablation result, and conservative interpretation. Results are reported as pilot evidence over validated examples, not as statistical generalization.
+
+\section{Results}
+
+\subsection{Example 369}
+
+Example \texttt{369} targets a hallucinated film-title completion. The hallucinated target is \texttt{1986 John Hughes film "Pretty in Pink"}. The verified correction target is \texttt{1986 John Hughes film}.
+
+The pair passed validation: the clean run reproduced the target hallucination, and the corrupted run flipped to the verified truth without retaining the hallucinated substring. The model scope is \texttt{llama-2-7b-chat}. The divergence target for this example is output-relative divergence token index \texttt{22}, hallucinated token \texttt{"} (id \texttt{376}), and verified-truth token \texttt{,} (id \texttt{29892}).
+
+\begin{table}[t]
+\caption{Top restoring layers for example \texttt{369}.}
+\centering
+\small
+\begin{tabular}{clc}
+\toprule
+\textbf{Rank} & \textbf{Layer} & \textbf{Restoration score} \\
+\midrule
+1 & \texttt{L30} & 16.460938 \\
+2 & \texttt{L29} & 16.390625 \\
+3 & \texttt{L23} & 15.804688 \\
+\bottomrule
+\end{tabular}
+
+\label{tab:369-layers}
+\end{table}
+
+\begin{table}[t]
+\caption{Top restoring heads for example \texttt{369}.}
+\centering
+\small
+\begin{tabular}{clc}
+\toprule
+\textbf{Rank} & \textbf{Head} & \textbf{Restoration score} \\
+\midrule
+1 & \texttt{L30H26} & 0.507812 \\
+2 & \texttt{L23H3} & 0.453125 \\
+3 & \texttt{L23H10} & 0.250000 \\
+4 & \texttt{L29H26} & 0.234375 \\
+5 & \texttt{L29H5} & 0.187500 \\
+\bottomrule
+\end{tabular}
+\label{tab:369-heads}
+\end{table}
+
+The best single-head ablation was \texttt{L23H3} with ablation score \texttt{1.757812}. The best multi-head ablation was \texttt{pair\_L30H26\_L23H3} with score \texttt{3.046875}.
+
+For this example, late layers \texttt{L30} and \texttt{L29} showed strong restoration, while \texttt{L23} also appeared prominently. The ablation effects were larger than in example \texttt{813}. This is strong pilot signal for this single example, but it should not be generalized by itself.
+
+\subsection{Example 813}
+
+Example \texttt{813} targets a hallucinated legal-charge completion. The hallucinated target is \texttt{10 counts of fraud}. The verified correction target is \texttt{two counts of offering a false instrument for filing in the first degree}.
+
+The pair passed validation: the clean run reproduced the target hallucination, and the corrupted run flipped to the verified truth without retaining the hallucinated substring. The model scope is \texttt{llama-2-7b-chat}. The divergence target for this example is output-relative divergence token index \texttt{16}, hallucinated divergence token (a tokenizer boundary / whitespace-like token id \texttt{29871}), and verified-truth token \texttt{two} (id \texttt{1023}).
+
+The tokenizer detail for id 29871 (a whitespace artifact common in Llama-2's SentencePiece tokenizer before digits) should be interpreted carefully. The meaningful comparison is the aligned prediction contrast between the hallucinated continuation and the verified-truth continuation, not the human-readable decoded surface form of the boundary-like token.
+
+\begin{table}[t]
+\caption{Top restoring layers for example \texttt{813}.}
+\centering
+\small
+\begin{tabular}{clc}
+\toprule
+\textbf{Rank} & \textbf{Layer} & \textbf{Restoration score} \\
+\midrule
+1 & \texttt{L30} & 8.250000 \\
+2 & \texttt{L29} & 8.203125 \\
+3 & \texttt{L31} & 7.875000 \\
+\bottomrule
+\end{tabular}
+
+\label{tab:813-layers}
+\end{table}
+
+\begin{table}[t]
+\caption{Top restoring heads for example \texttt{813}.}
+\centering
+\small
+\begin{tabular}{clc}
+\toprule
+\textbf{Rank} & \textbf{Head} & \textbf{Restoration score} \\
+\midrule
+1 & \texttt{L29H5} & 0.554688 \\
+2 & \texttt{L29H21} & 0.140625 \\
+3 & \texttt{L31H4} & 0.085938 \\
+4 & \texttt{L31H31} & 0.062500 \\
+5 & \texttt{L30H31} & 0.054688 \\
+\bottomrule
+\end{tabular}
+
+\label{tab:813-heads}
+\end{table}
+
+The best single-head ablation was \texttt{L29H5} with score \texttt{0.257812}. The best multi-head ablation was \texttt{top3\_heads} with score \texttt{0.179688}. The top-3 multi-head ablation was weaker than the best single-head ablation, suggesting that the selected heads do not combine additively in this pilot setting.
+
+For this example, the strongest layer-level signal again appeared in late layers around L29--L30, with \texttt{L31} also present among top layers. The head-level signal differed from example \texttt{369}, with \texttt{L29H5} strongest for this example. Ablation effects were smaller than for example \texttt{369}.
+
+\section{Cross-Example Analysis}
+
+Both completed examples passed the same validation criterion: the clean run reproduced the target hallucination and the corrupted run flipped to the verified truth. This makes the two examples comparable as controlled prompt-correction pairs, although the content, tokenization, and score magnitudes differ.
+
+\begin{table}[t]
+\caption{Layer-level comparison across completed examples.}
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Example} & \textbf{Strongest layers} \\
+\midrule
+\texttt{369} & \texttt{L30}, \texttt{L29}, \texttt{L23} \\
+\texttt{813} & \texttt{L30}, \texttt{L29}, \texttt{L31} \\
+\bottomrule
+\end{tabular}
+
+\label{tab:layer-comparison}
+\end{table}
+
+At the layer level, both examples implicate late layers around L29--L30 (see Table~\ref{tab:layer-comparison}). This is the strongest repeated pattern in the current pilot. It suggests that late-layer representations around L29--L30 are useful places to inspect in future examples. It does not establish that those layers are a general hallucination mechanism.
+
+
+
+\begin{table}[t]
+\caption{Head-level comparison across completed examples.}
+\centering
+\small
+\begin{tabular}{lp{0.62\linewidth}}
+\toprule
+\textbf{Example} & \textbf{Strongest heads} \\
+\midrule
+\texttt{369} & \texttt{L30H26}, \texttt{L23H3}, \texttt{L23H10}, \texttt{L29H26}, \texttt{L29H5} \\
+\texttt{813} & \texttt{L29H5}, \texttt{L29H21}, \texttt{L31H4}, \texttt{L31H31}, \texttt{L30H31} \\
+\bottomrule
+\end{tabular}
+
+\label{tab:head-comparison}
+\end{table}
+
+As shown in Table~\ref{tab:head-comparison}, \texttt{L29H5} appears in both result sets, but it is strongest for \texttt{813} and only a secondary candidate for \texttt{369}. The strongest repeated signal is therefore layer-level, not head-level: both examples implicate late layers around L29--L30, but the exact heads differ.
+
+
+\begin{table}[t]
+\caption{Ablation strength comparison across completed examples.}
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Example} & \textbf{Best single-head} & \textbf{Best multi-head} \\
+\midrule
+\texttt{369} & \texttt{L23H3}, 1.757812 & \texttt{pair\_L30H26\_L23H3}, 3.046875 \\
+\texttt{813} & \texttt{L29H5}, 0.257812 & \texttt{top3\_heads}, 0.179688 \\
+\bottomrule
+\end{tabular}
+
+\label{tab:ablation-comparison}
+\end{table}
+
+ Table~\ref{tab:ablation-comparison} details the ablation strengths. This difference may indicate that the relevant signal is more concentrated in the tested heads for \texttt{369} than for \texttt{813}, or that the current ablation setup interacts differently with the two examples. With only two examples, this remains an interpretation to test, not a claim.
+
+The current evidence therefore supports prioritizing late-layer inspection in future examples, while treating head-level candidates as example-specific until more data are added.
+
+\section{Discussion}
+
+The main value of the current pilot is the controlled workflow. By requiring pair validation before tracing, the project avoids tracing examples where the clean/corrupted contrast is not actually present. By storing outputs in run folders and keeping registry status concise, the project also avoids relying on ad hoc CSVs or overwritten run logs.
+
+The workflow itself is a contribution because it converts candidate hallucinations into validated clean/corrupted tracing examples. Instead of starting from an interesting error and immediately tracing it, the process verifies that the hallucination reproduces, that a minimal intervention flips the answer, and that the example has the token-level structure required for downstream patching.
+
+The two completed examples provide a useful early pattern. Both show strong layer-level restoration in late layers around L29--L30. This repeated layer-level signal is a reasonable hypothesis for the next round of tracing. However, the exact head candidates differ, and the ablation strength differs substantially. Notably, Example 813 exhibited non-additive behavior, where ablating the top three heads produced a weaker effect than ablating the single best head. This suggests that candidate heads may interact non-linearly or exhibit cancellation effects when suppressed simultaneously. Further multi-head ablation studies are required to understand how these components interact. The current evidence therefore supports continued inspection of late layers, but not a stable head-level circuit claim.
+
+The clean/corrupted terminology is also important. In this project, clean refers to the original prompt condition, not factual correctness. Corrupted refers to the intervention condition, even though that intervention is designed to produce a more factual answer. This convention is useful for causal tracing, but it should be explained clearly in presentations and writing.
+
+The failed and parked examples matter for interpretation. They show that successful tracing examples are not automatic: pair validation can fail, correction targets can be weak, and token mapping can be ambiguous. As the pilot scales, these exclusions should continue to be documented. 
+
+To maintain this rigor, future completed examples must be added using the same structure: hallucination and correction target, validation outcome, divergence target, top restoring layers, top restoring heads, best ablation result, and conservative interpretation. The evidence table and cross-example comparison should be updated only after the example passes pair validation and completes the tracing stages.
+
+
+\section{Limitations}
+
+This study has several important limitations.
+
+First, only two examples have completed the full tracing workflow. The results are pilot evidence and cannot support statistical generalization.
+
+Second, all completed tracing results are from \texttt{llama-2-7b-chat}. The findings should not be generalized to other models, model families, or model sizes.
+
+Third, pair validation is brittle. A prompt may be scientifically promising but fail because the clean run does not reproduce the target hallucination or because the corrupted run does not flip cleanly to the verified truth.
+
+Fourth, tokenization complicates interpretation. Example \texttt{813} has a divergence token corresponding to a tokenizer boundary / whitespace-like token id \texttt{29871}. The aligned prediction contrast remains useful, but the decoded token itself should not be over-interpreted.
+
+Fifth, head-level results are not stable across the two examples. The current evidence does not identify a shared head-level circuit.
+
+Finally, the current workflow tests selected factuality corrections and does not evaluate broad hallucination categories, production mitigation, or downstream user-facing reliability.
+
+\section{Ethical Considerations}
+
+This project studies factuality failures and model internals in a controlled research setting. The findings should not be presented as a production hallucination detector, a safety guarantee, or evidence that the model's factual behavior is fully understood.
+
+The examples involve generated summaries of real-world content. Such outputs can contain misleading or sensitive claims if reused outside the controlled validation context. Care should be taken not to amplify hallucinated statements as if they were factual.
+
+There is also an interpretability communication risk: mechanistic results can sound more definitive than they are. This report therefore uses conservative language and explicitly avoids claiming a stable circuit, stable head, or broad mechanism.
+
+No deployment or user-facing decision system is proposed in this pilot.
+
+\section{Conclusion}
+
+This pilot study builds a reusable workflow for tracing prompt-corrected hallucination pairs in \texttt{llama-2-7b-chat}. Two examples, \texttt{369} and \texttt{813}, completed pair validation and full tracing through head ablation. In both examples, the strongest repeated signal appears at the layer level in late layers around L29--L30. The exact head candidates differ, and the ablation strengths differ, so the evidence does not support a stable circuit or stable head claim.
+
+The next step is to add more validated examples using the same registry and run-folder workflow. Future examples should be appended to the evidence table and cross-example analysis rather than retrofitted into the current two-example interpretation.
+
+\clearpage
+\onecolumn
+\begin{thebibliography}{}
+
+\bibitem[Elhage et~al.(2021)]{TransformerCircuits}
+Nelson Elhage, Neel Nanda, Catherine Olsson, Tom Henighan, Nicholas Joseph, Ben Mann, Amanda Askell, Yuntao Bai, and others.
+2021.
+\newblock A Mathematical Framework for Transformer Circuits.
+\newblock Transformer Circuits Thread.
+\newblock \url{https://transformer-circuits.pub/2021/framework/index.html}.
+
+\bibitem[Lin et~al.(2022)]{TruthfulQA}
+Stephanie Lin, Jacob Hilton, and Owain Evans. 2022.
+\newblock TruthfulQA: Measuring How Models Mimic Human Falsehoods.
+\newblock In \emph{Proceedings of ACL 2022}, pages 3214--3252.
+\newblock \url{https://aclanthology.org/2022.acl-long.229/}.
+
+\bibitem[Lu et~al.(2022)]{PromptOrderSensitivity}
+Yao Lu, Max Bartolo, Alastair Moore, Sebastian Riedel, and Pontus Stenetorp.
+2022.
+\newblock Fantastically Ordered Prompts and Where to Find Them: Overcoming Few-Shot Prompt Order Sensitivity.
+\newblock In \emph{Proceedings of ACL 2022}, pages 8086--8098.
+\newblock \url{https://aclanthology.org/2022.acl-long.556/}.
+
+\bibitem[Manakul et~al.(2023)]{SelfCheckGPT}
+Potsawee Manakul, Adian Liusie, and Mark J. F. Gales.
+2023.
+\newblock SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models.
+\newblock In \emph{Proceedings of EMNLP 2023}, pages 9004--9017.
+\newblock \url{https://aclanthology.org/2023.emnlp-main.557/}.
+
+\bibitem[Meng et~al.(2022)]{ROME}
+Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov.
+2022.
+\newblock Locating and Editing Factual Associations in GPT.
+\newblock In \emph{Advances in Neural Information Processing Systems 35}.
+\newblock \url{https://proceedings.neurips.cc/paper_files/paper/2022/hash/6f1d43d5a82a37e89b0665b33bf3a182-Abstract-Conference.html}.
+
+\bibitem[Niu et~al.(2024)]{RAGTruth}
+Cheng Niu, Yuanhao Wu, Juno Zhu, Siliang Xu, KaShun Shum, Randy Zhong, Juntong Song, and Tong Zhang.
+2024.
+\newblock RAGTruth: A Hallucination Corpus for Developing Trustworthy Retrieval-Augmented Language Models.
+\newblock In \emph{Proceedings of ACL 2024}, pages 10862--10878.
+\newblock \url{https://aclanthology.org/2024.acl-long.585/}.
+
+\bibitem[Shin et~al.(2020)]{AutoPrompt}
+Taylor Shin, Yasaman Razeghi, Robert L. Logan IV, Eric Wallace, and Sameer Singh.
+2020.
+\newblock AutoPrompt: Eliciting Knowledge from Language Models with Automatically Generated Prompts.
+\newblock In \emph{Proceedings of EMNLP 2020}, pages 4222--4235.
+\newblock \url{https://aclanthology.org/2020.emnlp-main.346/}.
+
+\bibitem[Snel and Oh(2025)]{RAGTruthXtended}
+Jakob Snel and Seong Joon Oh. 2025.
+\newblock First Hallucination Tokens Are Different From Conditional Ones.
+\newblock arXiv:2507.20836. Dataset/code: RAGTruth\_Xtended.
+\newblock \url{https://arxiv.org/abs/2507.20836}; \url{https://github.com/jakobsnl/RAGTruth_Xtended}.
+
+\bibitem[Touvron et~al.(2023)]{Llama2}
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, and others.
+2023.
+\newblock Llama 2: Open Foundation and Fine-Tuned Chat Models.
+\newblock arXiv:2307.09288.
+\newblock \url{https://arxiv.org/abs/2307.09288}.
+
+\bibitem[Wang et~al.(2023)]{IOICircuit}
+Kevin Wang, Alexandre Variengien, Arthur Conmy, Buck Shlegeris, and Jacob Steinhardt.
+2023.
+\newblock Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 small.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}. arXiv:2211.00593.
+\newblock \url{https://arxiv.org/abs/2211.00593}.
+
+\bibitem[Zhang and Nanda(2024)]{ActivationPatchingBestPractices}
+Fred Zhang and Neel Nanda. 2024.
+\newblock Towards Best Practices of Activation Patching in Language Models: Metrics and Methods.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}. arXiv:2309.16042.
+\newblock \url{https://arxiv.org/abs/2309.16042}.
+
+\end{thebibliography}
+
+\appendix
+
+\section{Workflow and Prompt Details}
+\subsection{Registry Workflow}
+\label{app:registry}
+
+The registry workflow is designed to keep admitted examples, validation status, and tracing status in one canonical state file: \texttt{outputs/examples\_registry.csv}.
+
+The high-level lifecycle is:
+\begin{enumerate}
+    \item Explore candidates from accepted source material.
+    \item Admit only examples that pass pre-registry checks.
+    \item Run token-span feasibility.
+    \item Author a minimal corrupted prompt candidate.
+    \item Run pair validation.
+    \item Promote only validated pairs to tracing.
+    \item Run tracing stages in order.
+    \item Mark completed examples with final tracing status.
+\end{enumerate}
+
+Important final statuses include \texttt{ready\_for\_validation}, \texttt{parked}, \texttt{processed\_reject}, and \texttt{pilot\_complete}.
+
+\subsection{Prompt Construction Details}
+\label{app:prompts}
+
+Each completed example uses a clean input text for validation, a verified ground-truth target, a hallucinated substring, a corrupted prompt candidate, an edit class, an edit delta text, and a minimality rationale. The corrupted prompt is intended to be a small factuality-oriented intervention, not a wholesale rewrite of the task. This is important because large prompt changes would make the clean/corrupted comparison harder to interpret.
+
+% \clearpage
+% \onecolumn
+
+\section{Appendix Tables}
+\label{app:tables}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{2pt}
+
+\subsection{Excluded Examples}
+\label{app:excluded}
+
+\begin{center}
+\captionof{table}{Excluded failed, parked, and ambiguous examples.}
+\label{tab:excluded}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.0}
+\begin{tabular}{@{}p{0.08\linewidth}p{0.11\linewidth}p{0.50\linewidth}p{0.25\linewidth}@{}}
+\toprule
+\textbf{Example} & \textbf{Status} & \textbf{Reason} & \textbf{Revisit later?} \\
+\midrule
+\texttt{51} & Failed & Pair validation failed; the pair did not provide a clean hallucination-to-truth tracing contrast. & Low priority; revisit only if validation settings change. \\
+\texttt{3573} & Failed & Clean run did not reproduce the target date hallucination; corrupted run did not flip cleanly. & Low priority; revisit only if date-target prompt design is revised. \\
+\texttt{93} & Parked & Date/timeline correction target remains unvalidated for tracing. & Possible after expanding the validated set. \\
+\texttt{597} & Parked & Release-timing correction target remains unvalidated for tracing. & Possible after expanding the validated set. \\
+\texttt{2793} & Parked & Correction target was weak, so the contrast was not reliable enough for the pilot. & Low priority unless a stronger verified target is found. \\
+\texttt{2265} & Ambiguous & Token mapping was ambiguous for the current token-level tracing workflow. & Revisit only with a split-token or ambiguous-span policy. \\
+\texttt{2781} & Ambiguous & Token mapping was ambiguous for the current token-level tracing workflow. & Revisit only with a split-token or ambiguous-span policy. \\
+\bottomrule
+\end{tabular}
+\end{center}
+\vspace{-0.8em}
+
+\subsection{Run Artifacts}
+\label{app:artifacts}
+
+\begin{center}
+\captionof{table}{Saved run artifacts for example \texttt{813}.}
+\label{tab:artifacts-813}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.0}
+\centering
+\begin{tabular}{@{}lp{0.68\linewidth}@{}}
+\toprule
+\textbf{Stage} & \textbf{Run folder} \\
+\midrule
+Pair validation & \texttt{outputs/runs/20260425\_060337\_pair\_validation\_813/} \\
+Forward pass & \texttt{outputs/runs/20260425\_064458\_forward\_pass\_813/} \\
+Layer patching & \texttt{outputs/runs/20260425\_070723\_layer\_patching\_813/} \\
+Head patching & \texttt{outputs/runs/20260425\_073014\_head\_patching\_813/} \\
+Head ablation & \texttt{outputs/runs/20260425\_075129\_head\_ablation\_813/} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\vspace{-0.8em}
+
+\subsection{Tracing Evidence Summary}
+\label{app:evidence}
+
+\begin{center}
+\captionof{table}{Condensed per-example evidence table.}
+\label{tab:evidence}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.0}
+\begin{tabular}{@{}p{0.06\linewidth}p{0.28\linewidth}p{0.18\linewidth}p{0.22\linewidth}p{0.20\linewidth}@{}}
+\toprule
+\textbf{Ex.} & \textbf{Target contrast} & \textbf{Top layers} & \textbf{Top heads} & \textbf{Best ablation} \\
+\midrule
+\texttt{369} & Hallucinated: \texttt{1986 John Hughes film "Pretty in Pink"}; correction: \texttt{1986 John Hughes film}. & \texttt{L30} (16.460938), \texttt{L29} (16.390625), \texttt{L23} (15.804688). & \texttt{L30H26}, \texttt{L23H3}, \texttt{L23H10}, \texttt{L29H26}, \texttt{L29H5}. & Single: \texttt{L23H3} (1.757812). Multi: \texttt{pair\_L30H26\_L23H3} (3.046875). \\
+\texttt{813} & Hallucinated: \texttt{10 counts of fraud}; correction: \texttt{two counts of offering a false instrument for filing in the first degree}. & \texttt{L30} (8.250000), \texttt{L29} (8.203125), \texttt{L31} (7.875000). & \texttt{L29H5}, \texttt{L29H21}, \texttt{L31H4}, \texttt{L31H31}, \texttt{L30H31}. & Single: \texttt{L29H5} (0.257812). Multi: \texttt{top3\_heads} (0.179688). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Contribution Summary}
+\label{app:contributions}
+
+\textbf{Sai Naga Chaithanya Aavula} led the core architectural implementation and baseline experimentation. \textbf{Priyabrata Behera} designed the ablation studies and managed the pair validation workflow. \textbf{Nithish Dimpu Karanam} conducted the cross-example analysis and directed the manuscript preparation.
+
+\end{document}
